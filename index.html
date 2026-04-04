@@ -3,76 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passenger - GitHub Host</title>
-    <link rel="stylesheet" href="https://unpkg.com" />
+    <title>Passenger App - GitHub</title>
+    
+    <!-- Leaflet CSS - සිතියම පෙනෙන්නට මෙය අනිවාර්යයි -->
+    <link rel="stylesheet" href="https://unpkg.com" crossorigin="" />
+    
     <style>
-        body { font-family: sans-serif; margin: 0; }
-        #map { height: 75vh; width: 100%; background: #eee; }
-        .panel { padding: 15px; text-align: center; }
-        button { padding: 15px; width: 90%; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        body { font-family: sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
+        /* සිතියම පෙනෙන්නට උසක් (Height) අනිවාර්යයෙන් තිබිය යුතුයි */
+        #map { height: 75vh; width: 100%; background: #ddd; position: relative; }
+        .panel { padding: 20px; text-align: center; background: white; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+        button { padding: 15px; width: 90%; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        #status { font-weight: bold; margin-bottom: 10px; color: #333; }
     </style>
 </head>
 <body>
+
     <div id="map"></div>
     <div class="panel">
-        <p id="status">ඔබේ ස්ථානය සොයමින්...</p>
-        <button onclick="confirmBooking()">Confirm Ride</button>
+        <div id="status">ඔබේ ස්ථානය සොයමින් පවතී...</div>
+        <button onclick="confirmBooking()">ගමන තහවුරු කරන්න (Confirm)</button>
     </div>
 
-    <script src="https://unpkg.com"></script>
+    <!-- අත්‍යවශ්‍ය Scripts -->
+    <script src="https://unpkg.com" crossorigin=""></script>
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
 
     <script>
+        // --- ඔබේ Firebase Config එක ---
         const firebaseConfig = {
             apiKey: "AIzaSyBc9H83sV-EX-cQ2-7RbBKWOYJcoFG9874",
             databaseURL: "https://firebaseio.com",
             projectId: "mytaxiapp-b552e"
         };
-        firebase.initializeApp(firebaseConfig);
+        
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const database = firebase.database();
 
-        // මැප් එක මුලින්ම කොළඹට සෙට් කරනවා
+        // සිතියම කොළඹට මුලින් සකස් කිරීම
         var map = L.map('map').setView([6.9271, 79.8612], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
 
-        var pickupMarker = L.marker([0,0]).addTo(map).bindPopup("ඔබ මෙතැන");
-        var dropMarker = L.marker([0,0]).addTo(map);
+        var pickupMarker = L.marker([6.9271, 79.8612]).addTo(map).bindPopup("මම මෙතැන");
+        var dropMarker = L.marker().addTo(map);
         var tripData = { pickup_lat: 0, pickup_lng: 0, drop_lat: 0, drop_lng: 0, status: "idle" };
 
-        // --- මෙන්න මේක තමයි ලොකේෂන් එක AUTO ගන්න කොටස ---
-        function findMyCity() {
+        // GPS ලොකේෂන් එක AUTO ලබා ගැනීම
+        function findLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition((pos) => {
                     tripData.pickup_lat = pos.coords.latitude;
                     tripData.pickup_lng = pos.coords.longitude;
-
-                    // මැප් එක ඔබ ඉන්න තැනට හරියටම ගෙන යනවා
+                    
+                    // සිතියම ඔබ ඉන්නා තැනට ගෙනයාම
                     map.setView([tripData.pickup_lat, tripData.pickup_lng], 16);
                     pickupMarker.setLatLng([tripData.pickup_lat, tripData.pickup_lng]);
                     
-                    document.getElementById('status').innerText = "ස්ථානය හඳුනාගත්තා. යන තැන ක්ලික් කරන්න.";
+                    document.getElementById('status').innerText = "ඔබේ ස්ථානය ලැබුණා. යන තැන සිතියමෙන් තෝරන්න.";
+                    tripData.status = "located";
                 }, (err) => {
-                    alert("GPS වැඩ කරන්නේ නැහැ. කරුණාකර Permission Allow කරන්න.");
+                    document.getElementById('status').innerText = "ලොකේෂන් අවසරය ලබා දෙන්න (Allow Location).";
+                    console.log(err);
                 }, { enableHighAccuracy: true });
             }
         }
 
-        // පිටුව ලෝඩ් වුණු ගමන්ම ලොකේෂන් එක හොයන්න
-        window.onload = findMyCity;
+        // පිටුව ලෝඩ් වූ සැණින් GPS ක්‍රියාත්මක කිරීම
+        window.onload = findLocation;
 
+        // සිතියම මත ක්ලික් කර යන තැන තේරීම
         map.on('click', function(e) {
             tripData.drop_lat = e.latlng.lat;
             tripData.drop_lng = e.latlng.lng;
-            dropMarker.setLatLng(e.latlng);
-            document.getElementById('status').innerText = "ගමනාන්තය තෝරාගත්තා!";
+            dropMarker.setLatLng(e.latlng).bindPopup("යන ස්ථානය").openPopup();
+            document.getElementById('status').innerText = "යන ස්ථානය තෝරාගත්තා!";
         });
 
         function confirmBooking() {
-            if(tripData.drop_lat == 0) return alert("යන තැන තෝරන්න!");
+            if(tripData.drop_lat === 0) return alert("කරුණාකර යන ස්ථානය සිතියම මත ක්ලික් කරන්න!");
             tripData.status = "searching";
             database.ref('trips/trip1').set(tripData).then(() => {
-                alert("රියදුරෙකු සොයමින් පවතී...");
+                document.getElementById('status').innerText = "රියදුරෙකු සොයමින් පවතී...";
+                alert("හයර් එක සාර්ථකව පද්ධතියට එක් කළා!");
             });
         }
     </script>
