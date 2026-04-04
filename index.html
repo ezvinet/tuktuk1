@@ -3,67 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <title>Passenger - PickMe Clone</title>
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com" />
     <style>
-        body { font-family: sans-serif; margin: 0; }
-        #map { height: 70vh; width: 100%; background: #eee; }
+        body { font-family: sans-serif; margin: 0; padding: 0; }
+        /* සිතියම පෙනෙන්නට උසක් අනිවාර්යයි */
+        #map { height: 70vh; width: 100%; background: #eee; border-bottom: 2px solid #ccc; }
         .panel { padding: 20px; text-align: center; background: white; }
-        button { padding: 15px; width: 80%; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        #status { font-weight: bold; color: #333; margin-bottom: 10px; }
+        button { 
+            padding: 15px; width: 90%; max-width: 400px; 
+            background: #ffc107; border: none; border-radius: 10px; 
+            font-weight: bold; font-size: 16px; cursor: pointer; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button:active { background: #e0a800; }
     </style>
 </head>
 <body>
+
+    <!-- සිතියම පෙන්වන ස්ථානය -->
     <div id="map"></div>
+
     <div class="panel">
-        <p id="status">සිතියම මත ක්ලික් කර යන තැන තෝරන්න</p>
+        <div id="status">සිතියම මත ක්ලික් කර යන තැන තෝරන්න</div>
         <button onclick="confirmBooking()">ගමන තහවුරු කරන්න (Confirm)</button>
     </div>
 
+    <!-- Scripts -->
     <script src="https://unpkg.com"></script>
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
 
     <script>
+        // 1. Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyBc9H83sV-EX-cQ2-7RbBKWOYJcoFG9874",
             databaseURL: "https://firebaseio.com",
             projectId: "mytaxiapp-b552e"
         };
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const database = firebase.database();
 
+        // 2. සිතියම ආරම්භ කිරීම (කොළඹ කේන්ද්‍ර කරගෙන)
         var map = L.map('map').setView([6.9271, 79.8612], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        var pickupMarker = L.marker([0,0]).addTo(map).bindPopup("මම මෙතැන");
+        var pickupMarker = L.marker([6.9271, 79.8612]).addTo(map).bindPopup("මම මෙතැන");
         var dropMarker = L.marker([0,0]).addTo(map);
-        var tripData = { pickup_lat: 0, pickup_lng: 0, drop_lat: 0, drop_lng: 0, status: "idle" };
+        var tripData = { pickup_lat: 6.9271, pickup_lng: 79.8612, drop_lat: 0, drop_lng: 0, status: "idle" };
 
-        // 1. Live Location Track කිරීම
+        // 3. මගියාගේ සැබෑ ලොකේෂන් එක ලබා ගැනීම
         navigator.geolocation.watchPosition(pos => {
             tripData.pickup_lat = pos.coords.latitude;
             tripData.pickup_lng = pos.coords.longitude;
             pickupMarker.setLatLng([tripData.pickup_lat, tripData.pickup_lng]);
+            // මුල් වරට සිතියම මගියා ඉන්න තැනට ගෙනයන්න
+            if(tripData.status === "idle") { map.setView([tripData.pickup_lat, tripData.pickup_lng], 15); }
+        }, err => {
+            console.log("Location permission denied");
         });
 
-        // 2. Map එක මත ක්ලික් කර යන තැන තේරීම
+        // 4. සිතියම මත ක්ලික් කළ විට යන ස්ථානය (Drop-off) තෝරා ගැනීම
         map.on('click', function(e) {
             tripData.drop_lat = e.latlng.lat;
             tripData.drop_lng = e.latlng.lng;
             dropMarker.setLatLng(e.latlng);
-            document.getElementById('status').innerText = "ගමනාන්තය තෝරා ගත්තා!";
+            document.getElementById('status').innerText = "ගමනාන්තය තෝරා ගත්තා! දැන් Confirm කරන්න.";
         });
 
         function confirmBooking() {
-            if(tripData.drop_lat == 0) return alert("කරුණාකර යන තැන සිතියමෙන් තෝරන්න!");
+            if(tripData.drop_lat === 0) {
+                alert("කරුණාකර යන ස්ථානය සිතියම මත ක්ලික් කර තෝරන්න!");
+                return;
+            }
             tripData.status = "searching";
-            database.ref('trips/trip1').set(tripData);
-            document.getElementById('status').innerText = "රියදුරෙකු සොයමින් පවතී...";
+            database.ref('trips/trip1').set(tripData)
+                .then(() => {
+                    document.getElementById('status').innerText = "රියදුරෙකු සොයමින් පවතී...";
+                    alert("හයර් එක සාර්ථකව පද්ධතියට එක් කළා!");
+                })
+                .catch(err => alert("Error: " + err.message));
         }
 
-        // රියදුරා හයර් එක බාරගත් විට දැනුම් දීම
+        // රියදුරා හයර් එක බාරගත් විට පණිවිඩයක් පෙන්වීම
         database.ref('trips/trip1').on('value', snap => {
-            if(snap.val() && snap.val().status === "accepted") {
-                document.getElementById('status').innerText = "රියදුරා ඔබ වෙත එමින් පවතී!";
+            let data = snap.val();
+            if(data && data.status === "accepted") {
+                document.getElementById('status').innerText = "රියදුරා හයර් එක බාරගත්තා! ඔහු ඔබ වෙත එමින් පවතී.";
+                document.getElementById('status').style.color = "green";
             }
         });
     </script>
