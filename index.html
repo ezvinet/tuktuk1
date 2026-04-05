@@ -1,95 +1,103 @@
 <!DOCTYPE html>
-<html lang="si">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passenger - PickMe Clone</title>
-    
-    <!-- Leaflet CSS - සිතියම පෙනෙන්නට මෙය අනිවාර්යයි -->
-    <link rel="stylesheet" href="https://unpkg.com" />
-    
-    <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
-        /* සිතියම පෙනෙන්නට උසක් අනිවාර්යයෙන් තිබිය යුතුයි */
-        #map { height: 75vh; width: 100%; background: #ddd; position: relative; z-index: 1; }
-        .panel { padding: 20px; text-align: center; background: white; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: relative; z-index: 10; }
-        #status { font-weight: bold; margin-bottom: 10px; color: #333; font-size: 14px; }
-        button { padding: 15px; width: 90%; max-width: 400px; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
-    </style>
+<meta charset="UTF-8">
+<title>Passenger (FREE)</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<style>
+#map { height:90vh; }
+button { width:100%; padding:15px; font-size:18px; }
+</style>
 </head>
+
 <body>
 
-    <!-- සිතියම පෙන්වන ස්ථානය -->
-    <div id="map"></div>
+<h3>Passenger App (FREE)</h3>
+<div id="map"></div>
+<button onclick="confirmRide()">Confirm Ride</button>
 
-    <div class="panel">
-        <div id="status">ඔබේ ස්ථානය සොයමින් පවතී...</div>
-        <button onclick="confirmBooking()">ගමන තහවුරු කරන්න (Confirm)</button>
-    </div>
-
-    <!-- අත්‍යවශ්‍ය Scripts -->
-    <script src="https://unpkg.com"></script>
-    <script src="https://gstatic.com"></script>
-    <script src="https://gstatic.com"></script>
-
-    <script>
-        // 1. Firebase Config
-        const firebaseConfig = {
+<script>
+const firebaseConfig = {
+     
             apiKey: "AIzaSyBc9H83sV-EX-cQ2-7RbBKWOYJcoFG9874",
-            databaseURL: "https://firebaseio.com",
+            databaseURL: "https://mytaxiapp-b552e-default-rtdb.firebaseio.com",
             projectId: "mytaxiapp-b552e"
-        };
-        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-        const database = firebase.database();
+  
+};
 
-        // 2. සිතියම ආරම්භ කිරීම
-        var map = L.map('map').setView([6.9271, 79.8612], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-        var pickupMarker = L.marker([6.9271, 79.8612]).addTo(map).bindPopup("මම මෙතැන");
-        var dropMarker = L.marker().addTo(map);
-        var tripData = { pickup_lat: 0, pickup_lng: 0, drop_lat: 0, drop_lng: 0, status: "idle" };
+let map = L.map('map').setView([6.9271,79.8612],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // 3. GPS ලොකේෂන් එක AUTO ලබා ගැනීම
-        function findMyLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((pos) => {
-                    tripData.pickup_lat = pos.coords.latitude;
-                    tripData.pickup_lng = pos.coords.longitude;
-                    
-                    // සිතියම ඔබ ඉන්නා තැනට ගෙනයාම
-                    map.setView([tripData.pickup_lat, tripData.pickup_lng], 16);
-                    pickupMarker.setLatLng([tripData.pickup_lat, tripData.pickup_lng]);
-                    
-                    document.getElementById('status').innerText = "ඔබේ ස්ථානය ලැබුණා. යන තැන සිතියම මත ක්ලික් කරන්න.";
-                    tripData.status = "located";
-                }, (err) => {
-                    document.getElementById('status').innerText = "GPS අවසරය ලබා දෙන්න (Allow Location).";
-                }, { enableHighAccuracy: true, timeout: 10000 });
-            } else {
-                alert("ඔබේ බ්‍රව්සරය GPS සපයන්නේ නැත.");
-            }
+let pickup=null, drop=null, tripId=null;
+let driverMarker = L.marker([0,0]).addTo(map);
+
+// 📍 AUTO pickup (GPS)
+navigator.geolocation.getCurrentPosition(pos=>{
+    pickup = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+    };
+
+    L.marker([pickup.lat, pickup.lng]).addTo(map)
+    .bindPopup("Pickup").openPopup();
+
+    map.setView([pickup.lat, pickup.lng], 15);
+});
+
+// 👆 Drop select
+map.on('click', e=>{
+    if(!drop){
+        drop = e.latlng;
+        L.marker(drop).addTo(map).bindPopup("Drop").openPopup();
+    }
+});
+
+function confirmRide(){
+
+    if(!pickup || !drop){
+        alert("Select drop location");
+        return;
+    }
+
+    tripId = "trip_" + Date.now();
+
+    db.ref('trips/' + tripId).set({
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        drop_lat: drop.lat,
+        drop_lng: drop.lng,
+        status: "searching"
+    });
+
+    listenDriver();
+}
+
+function listenDriver(){
+
+    db.ref('trips/' + tripId).on('value', snap=>{
+
+        let d = snap.val();
+        if(!d) return;
+
+        if(d.status === "accepted"){
+            alert("Driver accepted!");
         }
 
-        // පිටුව ලෝඩ් වූ සැණින් GPS ක්‍රියාත්මක කිරීම
-        window.onload = findMyLocation;
-
-        // 4. සිතියම මත ක්ලික් කර යන තැන තේරීම
-        map.on('click', function(e) {
-            tripData.drop_lat = e.latlng.lat;
-            tripData.drop_lng = e.latlng.lng;
-            dropMarker.setLatLng(e.latlng).bindPopup("ගමනාන්තය").openPopup();
-            document.getElementById('status').innerText = "ගමනාන්තය තෝරාගත්තා! දැන් Confirm කරන්න.";
-        });
-
-        function confirmBooking() {
-            if(tripData.drop_lat === 0) return alert("කරුණාකර යන ස්ථානය සිතියම මත ක්ලික් කරන්න!");
-            tripData.status = "searching";
-            database.ref('trips/trip1').set(tripData).then(() => {
-                document.getElementById('status').innerText = "රියදුරෙකු සොයමින් පවතී...";
-                alert("හයර් එක පද්ධතියට එක් කළා!");
-            });
+        if(d.driver_lat){
+            driverMarker.setLatLng([d.driver_lat, d.driver_lng]);
         }
-    </script>
+    });
+}
+</script>
+
 </body>
 </html>
